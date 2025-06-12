@@ -6,14 +6,14 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import VectorParams, Distance
-from sentence_transformers import SentenceTransformer
 from llama_parse import LlamaParse
 
 # Load API keys from .env file
 load_dotenv()
 
 # Initialize LlamaParse client
-llama_parse = LlamaParse(api_key=os.getenv("LLAMA_PARSE_API_KEY"))
+def get_llama_parser():
+    return LlamaParse(api_key=os.getenv("LLAMA_PARSE_API_KEY"))
 
 #Initialising Ollama model
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL")
@@ -28,7 +28,8 @@ def read_file(file_path):
 
     if ext == ".pdf":
         print("Parsing PDF with LlamaParse...")
-        documents = llama_parse.load_data(file_path)
+        parser = get_llama_parser()
+        documents = parser.load_data(file_path)
         return "\n".join([doc.text for doc in documents])
 
     elif ext == ".txt":
@@ -61,7 +62,9 @@ def chunk_text(text, max_tokens=100):
     return [" ".join(words[i:i + max_tokens]) for i in range(0, len(words), max_tokens)]
 
 # === Qdrant Collection Management ===
-def create_qdrant_collection(client, collection_name, size=384, distance=Distance.COSINE):
+def create_qdrant_collection(client, collection_name, model, distance=Distance.COSINE):
+    size=model.get_sentence_embedding_dimension()
+
     try:
         existing = client.get_collections().collections
         if any(c.name == collection_name for c in existing):

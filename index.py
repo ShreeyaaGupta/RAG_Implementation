@@ -53,7 +53,7 @@ if file:
                         with st.spinner("Generating embeddings..."):
                             vectors = model.encode(chunks).tolist()
 
-                        # Recreate collection and upload vectors
+                        # Create collection and upload vectors
                         with st.spinner("Setting up Qdrant collection..."):
                             create_qdrant_collection(qdrant_client, collection_name="my_collection")
                         
