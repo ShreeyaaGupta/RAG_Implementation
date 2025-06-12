@@ -1,0 +1,17 @@
+# Python cache
+__pycache__/
+
+# Virtual environments
+env/
+
+# System files
+.DS_Store
+git
+# Qdrant local storage 
+qdrant_storage/
+
+# File uploads
+uploads/
+
+# Secrets or environment config 
+.env

@@ -1,0 +1,22 @@
+Machine learning (ML) allows computers to learn and make decisions without being explicitly programmed. It involves feeding data into algorithms to identify patterns and make predictions on new data. It is used in various applications like image recognition, speech processing, language translation, recommender systems, etc. In this article, we will see more about ML and its core concepts.
+
+	What Makes a Machine "Learn"?
+	A machine "learns" by identifying patterns in data and improving its ability to perform specific tasks without being explicitly programmed for every scenario. This learning process helps machines to make accurate predictions or decisions based on the information they receive. Unlike traditional programming where instructions are fixed, ML allows models to adapt and improve through experience.
+	Here is how the learning process works:
+	1. Data Input: Machine needs data like text, images or numbers to analyze. Good quality and enough quantity of data are important for effective learning.
+	2. Algorithms: Algorithms are mathematical methods that help the machine find patterns in data. Different algorithms help different tasks such as classification or regression.
+	3. Model Training: During training, the machine adjusts its internal settings to better predict outcomes. It learns by reducing the difference between its predictions and actual results.
+	4. Feedback Loop: Machine compares its predictions with true outcomes and uses this feedback to correct errors. Techniques like gradient descent help it update and improve.
+	5. Experience and Iteration: Machine repeats training many times with data helps in refining its predictions with each pass, more data and iterations improve accuracy.
+	6. Evaluation and Generalization: Model is tested on unseen data to ensure it performs well on real-world tasks.
+
+Importance of Data in Machine Learning
+Data is the foundation of machine learning (ML) without quality data ML models cannot learn, perform or make accurate predictions.
+
+Data provides the examples from which models learn patterns and relationships.
+High-quality and diverse data improves how well models perform and generalize to new situations.
+It helps models to understand real-world scenarios and adapt to practical uses.
+Features extracted from data are important for effective training.
+Separate datasets for validation and testing measure how well the model works on unseen data.
+Data drives continuous improvements in models through feedback loops.
+	

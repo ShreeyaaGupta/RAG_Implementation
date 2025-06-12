@@ -1,0 +1,10 @@
+qdrant-client
+sentence-transformers
+langchain
+pdfplumber
+python-docx
+beautifulsoup4
+lxml
+llama-index[llamaparse]
+streamlit
+python-dotenv
