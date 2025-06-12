@@ -1,131 +1,160 @@
+import streamlit as st
 import os
-import docx
-import csv
-from bs4 import BeautifulSoup
-from qdrant_client import QdrantClient
-from qdrant_client.http.models import VectorParams, Distance
-import numpy as np
-from sentence_transformers import SentenceTransformer
-from transformers import pipeline
 import requests
-from llama_parse import LlamaParse
+from sentence_transformers import SentenceTransformer
+from rag_utils import *
 
-# Initialize LlamaParse client (Set your API key here)
-llama_parse = LlamaParse(api_key="llx-NzoqDM23DzsbI6fJYntN2WgT2tXXKdqv5Vd9RFwOQpZL5oQu")
+# ----- PAGE CONFIG -----
+st.set_page_config(page_title="RAG Implementation with Qdrant + Ollama", layout="wide")
 
+# ----- CUSTOM CSS -----
+st.markdown("""
+    <style>
+    .main {
+        background-color: #f8f9fa;
+        padding: 2rem;
+    }
+    .stButton>button {
+        background-color: #4CAF50;
+        color: white;
+        font-weight: bold;
+        border-radius: 8px;
+        padding: 0.5em 1em;
+    }
+    .stButton>button:hover {
+        background-color: #45a049;
+        color: white;
+    }
+    .uploadedFileName {
+        font-weight: bold;
+        color: #2c3e50;
+    }
+    .section-title {
+        font-size: 1.5rem;
+        margin-top: 2rem;
+        font-weight: 600;
+        color: #333;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
-def read_file(file_path):
-    ext = os.path.splitext(file_path)[1].lower()
+# ----- TITLE -----
 
-    if ext == ".pdf":
-        print("Parsing PDF with LlamaParse...")
-        documents = llama_parse.load_data(file_path)
-        return "\n".join([doc.text for doc in documents])
+st.markdown("<h1 style='color: #1f77b4;'> RAG Implementation with Qdrant + Ollama</h1>", unsafe_allow_html=True)
 
-    elif ext == ".txt":
-        with open(file_path, "r", encoding="utf-8") as f:
-            return f.read()
+# ----- LOAD MODEL AND QDRANT CLIENT -----
+@st.cache_resource
+def load_model():
+    return SentenceTransformer('paraphrase-MiniLM-L6-v2')
 
-    elif ext == ".docx":
-        doc = docx.Document(file_path)
-        return "\n".join([para.text for para in doc.paragraphs])
+@st.cache_resource
+def get_client():
+    return client  # Defined in app.py
 
-    elif ext == ".csv":
-        text = ""
-        with open(file_path, "r", encoding="utf-8") as f:
-            reader = csv.reader(f)
-            for row in reader:
-                text += " ".join(row) + "\n"
-        return text
+model = load_model()
+qdrant_client = get_client()
 
-    elif ext in [".html", ".htm"]:
-        with open(file_path, "r", encoding="utf-8") as f:
-            soup = BeautifulSoup(f, "html.parser")
-            return soup.get_text()
+# ----- SIDEBAR -----
+with st.sidebar:
+    st.image("chatboticon.png", width=300)
+    st.info("Upload your file of choice and start asking questions!")
+    if st.session_state.get('processed', False):
+        st.success(f"✅ Processed: {st.session_state.get('chunks_count', 0)} chunks")
 
-    else:
-        raise ValueError(f"Unsupported file type: {ext}")
- 
-def chunk_text(text, max_tokens=100):
-    words = text.split()
-    return [" ".join(words[i:i+max_tokens]) for i in range(0, len(words), max_tokens)]
+# ----- FILE UPLOAD -----
+st.markdown("### Please upload a file")
+file = st.file_uploader("Drop your file here:", type=["txt", "pdf", "docx", "csv", "html"])
 
-client = QdrantClient(
-    url="https://2658912c-32a7-4ba4-b6a1-1fdd6c26c160.europe-west3-0.gcp.cloud.qdrant.io",
-    api_key="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIn0.wU-LH_0rgaM_bpzXl2eNJDIX9CNqnyHchLG_nwhQjhc",
-)
- 
-print(client.get_collections())
+if file:
+    st.markdown(f"<p class='uploadedFileName'>✅ Uploaded: {file.name}</p>", unsafe_allow_html=True)
 
-def recreate_qdrant_collection(client, collection_name="my_collection", size=384, distance=Distance.COSINE):
-    try:
-        client.delete_collection("my_collection")
-        print("Deleted old 'my_collection' successfully.")
-    except Exception as e:
-        print(f"Error deleting collection: {e}")
+    # Automatically save the uploaded file to local storage
+    save_folder = "uploads"
+    os.makedirs(save_folder, exist_ok=True)
+    save_path = os.path.join(save_folder, file.name)
+    with open(save_path, "wb") as f:
+        f.write(file.getbuffer())
+    st.success(f" File has been saved to `{save_path}`")
 
-            # Recreate with correct size = 384
-    try:
-        client.create_collection(
-        collection_name="my_collection",
-        vectors_config=VectorParams(size=384, distance=Distance.COSINE),
-        )
-        print("Created 'my_collection' with dimension 384.")
-    except Exception as e:
-        print(f"Error creating collection: {e}")
+    if st.button(" Process File"):
+            try:
+                raw_text = read_file(save_path)
 
-# file_path = "ml.txt"  # Change to your file path
-# raw_text = read_file(file_path)
-# chunks = chunk_text(raw_text)
+                if not raw_text.strip():
+                    st.error(" No text content found.")
+                else:
+                    chunks = chunk_text(raw_text)
 
-#Generate real text embeddings
-# model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
-# vectors = model.encode(chunks).tolist()
- 
-# Upload vectors using upsert instead of upload_collection
-def upload_vectors_to_qdrant(client, collection_name, vectors, chunks):
-    try:
-        client.upsert(
-        collection_name="my_collection",
-        points=[
-            {
-                "id": i,
-                "vector": vectors[i],
-                "payload": {"text": chunks[i]},
-            }
-            for i in range(len(chunks))
-        ]
-    )
-        print("Vectors uploaded successfully")
-    except Exception as e:
-        print(f"Error uploading vectors: {e}")
+                    if not chunks:
+                        st.error("No chunks created from text.")
+                    else:
+                        with st.spinner("Generating embeddings..."):
+                            vectors = model.encode(chunks).tolist()
 
-# query = "What are algorithms?"
-# query_vector = model.encode(query).tolist()
-# print("-----line61----")
+                        with st.spinner("Creating Qdrant collection..."):
+                            create_qdrant_collection(qdrant_client, "my_collection", model)
 
-results = None  
-# Search
-def search_qdrant(client, collection_name, query_vector, limit=3):
-    try:
-        results = client.search(
-        collection_name="my_collection",
-        query_vector=query_vector,
-        limit=3,
-        with_vectors=True,
-        with_payload=True
-        )
-        print("Search results:")
-        for r in results:
-            print(f"- {r.payload['text']} (score: {r.score})")
-        return results
-    except Exception as e:
-        print(f"Error during search: {e}")
+                        with st.spinner("Uploading vectors..."):
+                            upload_vectors_to_qdrant(qdrant_client, "my_collection", vectors, chunks)
 
-# qa_pipeline = pipeline("question-answering", model="distilbert-base-cased-distilled-squad")
+                        st.success("File processed and vectors uploaded!")
+                        st.session_state.processed = True
+                        st.session_state.chunks_count = len(chunks)
 
-# if not results:
-#     print("No results found or query failed. Exiting.")
-#     exit()
+            except Exception as e:
+                st.error(f"Error: {str(e)}")
 
-# retrieved_context = " ".join([r.payload["text"] for r in results])
+# ----- QUERY SECTION -----
+if st.session_state.get('processed', False):
+    st.markdown("<div class='section-title'> Ask Questions!</div>", unsafe_allow_html=True)
+    query = st.text_input("Type your question here:", key="query_input")
+
+    if st.button("Search for answers"):
+        if query.strip():
+            try:
+                with st.spinner("Searching in Qdrant..."):
+                    query_vector = model.encode(query).tolist()
+                    results = search_qdrant(qdrant_client, "my_collection", query_vector)
+
+                if results:
+                    retrieved_context = " ".join([r.payload["text"] for r in results])
+
+                    with st.expander("View Retrieved Context"):
+                        for i, result in enumerate(results):
+                            st.markdown(f"** Chunk {i+1} (Score: {getattr(result, 'score', 'N/A')}):**")
+                            st.write(result.payload["text"][:200] + "...")
+                            st.markdown("---")
+
+                    ollama_payload = {
+                        "model": "llama3",
+                        "prompt": f"Context: {retrieved_context}\n\nQuestion: {query}\n\nAnswer:",
+                        "stream": False
+                    }
+
+                    try:
+                        with st.spinner("Getting answer from Ollama..."):
+                            response = requests.post(
+                                "http://localhost:11434/api/generate",
+                                json=ollama_payload,
+                                timeout=300
+                            )
+
+                        if response.status_code == 200:
+                            answer = response.json()["response"].strip()
+                            st.subheader("Answer:")
+                            st.write(answer)
+                        else:
+                            st.error(f"Ollama API returned status code: {response.status_code}")
+
+                    except requests.exceptions.ConnectionError:
+                        st.error(" Could not connect to Ollama. Make sure it is running.")
+                    except Exception as e:
+                        st.error(f"Ollama error: {str(e)}")
+
+                else:
+                    st.warning("No relevant results found in Qdrant.")
+
+            except Exception as e:
+                st.error(f"Search error: {str(e)}")
+        else:
+            st.warning("Please enter a question before clicking 'Ask'")
