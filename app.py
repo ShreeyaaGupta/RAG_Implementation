@@ -3,44 +3,21 @@ import os
 import requests
 from sentence_transformers import SentenceTransformer
 from rag_utils import *
+from prompt import SYSTEM_PROMPT_QA
 
 # ----- PAGE CONFIG -----
 st.set_page_config(page_title="RAG Implementation with Qdrant + Ollama", layout="wide")
 
-# ----- CUSTOM CSS -----
-st.markdown("""
-    <style>
-    .main {
-        background-color: #f8f9fa;
-        padding: 2rem;
-    }
-    .stButton>button {
-        background-color: #4CAF50;
-        color: white;
-        font-weight: bold;
-        border-radius: 8px;
-        padding: 0.5em 1em;
-    }
-    .stButton>button:hover {
-        background-color: #45a049;
-        color: white;
-    }
-    .uploadedFileName {
-        font-weight: bold;
-        color: #2c3e50;
-    }
-    .section-title {
-        font-size: 1.5rem;
-        margin-top: 2rem;
-        font-weight: 600;
-        color: #333;
-    }
-    </style>
-""", unsafe_allow_html=True)
+# ----- LOADING CSS -----
+def load_css(file_path):
+    with open(file_path, "r") as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
+load_css("style.css")
 
 # ----- TITLE -----
 
-st.markdown("<h1 style='color: #1f77b4;'> RAG Implementation with Qdrant + Ollama</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='color: #077edb;'> RAG Implementation with Qdrant + Ollama</h1>", unsafe_allow_html=True)
 
 # ----- LOAD MODEL AND QDRANT CLIENT -----
 @st.cache_resource
@@ -122,12 +99,12 @@ if st.session_state.get('processed', False):
                     with st.expander("View Retrieved Context"):
                         for i, result in enumerate(results):
                             st.markdown(f"** Chunk {i+1} (Score: {getattr(result, 'score', 'N/A')}):**")
-                            st.write(result.payload["text"][:200] + "...")
+                            st.write(result.payload["text"])
                             st.markdown("---")
 
                     ollama_payload = {
                         "model": "llama3",
-                        "prompt": f"Context: {retrieved_context}\n\nQuestion: {query}\n\nAnswer:",
+                        "prompt": f"{SYSTEM_PROMPT_QA}\n\nContext:\n{retrieved_context}\n\nQuestion:\n{query}\n\nAnswer:",
                         "stream": False
                     }
 
