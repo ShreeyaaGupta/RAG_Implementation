@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import VectorParams, Distance
 from llama_parse import LlamaParse
+from prompt import SYSTEM_PROMPT_QA
 
 # Load API keys from .env file
 load_dotenv()
@@ -116,7 +117,7 @@ def search_qdrant(client, collection_name, query_vector, limit=3):
 
 # === Contextual Answering ===
 def get_answer_from_ollama(query: str, context: str,) -> str:
-    prompt = f"Context: {context}\n\nQuestion: {query}\n\nAnswer:"
+    prompt = f"{SYSTEM_PROMPT_QA}\n\nContext: {context}\n\nQuestion: {query}\n\nAnswer:"
     payload = {
         "model": OLLAMA_MODEL,
         "prompt": prompt,
