@@ -16,7 +16,7 @@ def load_css(file_path):
 load_css("style.css")
 
 # ----- TITLE -----
-st.title("DocCheck by Alice")
+st.title("RAG Implementation with ")
 
 # ----- LOAD MODEL AND QDRANT CLIENT -----
 @st.cache_resource
