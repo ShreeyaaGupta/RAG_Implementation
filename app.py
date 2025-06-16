@@ -5,7 +5,7 @@ from sentence_transformers import SentenceTransformer
 from rag_utils import *
 from prompt import SYSTEM_PROMPT_QA
 
-# ----- PAGE CONFIG -----
+# ----- PAGE CONFIG ---
 st.set_page_config(page_title="RAG Implementation with Qdrant + Ollama", layout="wide")
 
 # ----- LOADING CSS -----
