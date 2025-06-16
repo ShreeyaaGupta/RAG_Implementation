@@ -16,8 +16,7 @@ def load_css(file_path):
 load_css("style.css")
 
 # ----- TITLE -----
-
-st.markdown("<h1 style='color: #077edb;'> RAG Implementation with Qdrant + Ollama</h1>", unsafe_allow_html=True)
+st.title("DocCheck by Alice")
 
 # ----- LOAD MODEL AND QDRANT CLIENT -----
 @st.cache_resource
@@ -26,7 +25,7 @@ def load_model():
 
 @st.cache_resource
 def get_client():
-    return client  # Defined in app.py
+    return client  # Defined in rag_utils.py
 
 model = load_model()
 qdrant_client = get_client()
@@ -34,104 +33,94 @@ qdrant_client = get_client()
 # ----- SIDEBAR -----
 with st.sidebar:
     st.image("chatboticon.png", width=300)
-    st.info("Upload your file of choice and start asking questions!")
-    if st.session_state.get('processed', False):
-        st.success(f"✅ Processed: {st.session_state.get('chunks_count', 0)} chunks")
+    file = st.file_uploader("Drop your file here:", type=["txt", "pdf", "docx", "csv", "html"])
 
-# ----- FILE UPLOAD -----
-st.markdown("### Please upload a file")
-file = st.file_uploader("Drop your file here:", type=["txt", "pdf", "docx", "csv", "html"])
+    if file and not st.session_state.get('processed', False):
+        save_folder = "uploads"
+        os.makedirs(save_folder, exist_ok=True)
+        save_path = os.path.join(save_folder, file.name)
+        with open(save_path, "wb") as f:
+            f.write(file.getbuffer())
 
-if file:
-    st.markdown(f"<p class='uploadedFileName'>✅ Uploaded: {file.name}</p>", unsafe_allow_html=True)
+        try:
+            raw_text = read_file(save_path)
 
-    # Automatically save the uploaded file to local storage
-    save_folder = "uploads"
-    os.makedirs(save_folder, exist_ok=True)
-    save_path = os.path.join(save_folder, file.name)
-    with open(save_path, "wb") as f:
-        f.write(file.getbuffer())
-    st.success(f" File has been saved to `{save_path}`")
+            if not raw_text.strip():
+                st.error("No text content found.")
+            else:
+                chunks = chunk_text(raw_text)
 
-    if st.button(" Process File"):
-            try:
-                raw_text = read_file(save_path)
-
-                if not raw_text.strip():
-                    st.error(" No text content found.")
+                if not chunks:
+                    st.error("No chunks created from text.")
                 else:
-                    chunks = chunk_text(raw_text)
+                    vectors = model.encode(chunks).tolist()
+                    create_qdrant_collection(qdrant_client, "my_collection", model)
+                    upload_vectors_to_qdrant(qdrant_client, "my_collection", vectors, chunks)
 
-                    if not chunks:
-                        st.error("No chunks created from text.")
-                    else:
-                        with st.spinner("Generating embeddings..."):
-                            vectors = model.encode(chunks).tolist()
+                    st.success("Your file has been processed")
+                    st.session_state.processed = True
+                    st.session_state.chunks_count = len(chunks)
 
-                        with st.spinner("Creating Qdrant collection..."):
-                            create_qdrant_collection(qdrant_client, "my_collection", model)
+        except Exception as e:
+            st.error(f"Error: {str(e)}")
 
-                        with st.spinner("Uploading vectors..."):
-                            upload_vectors_to_qdrant(qdrant_client, "my_collection", vectors, chunks)
+# ----- CHAT UI -----
+if "messages" not in st.session_state:
+    st.session_state.messages = [
+        {
+            "role": "assistant",
+            "content": "Hi I'm Alice, your document assistant. Upload a document and ask me any question about it!"
+        }
+    ]
 
-                        st.success("File processed and vectors uploaded!")
-                        st.session_state.processed = True
-                        st.session_state.chunks_count = len(chunks)
+# Render chat history
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
-            except Exception as e:
-                st.error(f"Error: {str(e)}")
+# Chat input
+if prompt := st.chat_input("Ask me anything about your file..."):
+    if not st.session_state.get("processed", False):
+        st.warning("Please upload and process a file first.")
+    else:
+        st.chat_message("user").markdown(prompt)
+        st.session_state.messages.append({"role": "user", "content": prompt})
 
-# ----- QUERY SECTION -----
-if st.session_state.get('processed', False):
-    st.markdown("<div class='section-title'> Ask Questions!</div>", unsafe_allow_html=True)
-    query = st.text_input("Type your question here:", key="query_input")
+        with st.chat_message("assistant"):
+            msg_placeholder = st.empty()
+            msg_placeholder.markdown("Thinking...")
 
-    if st.button("Search for answers"):
-        if query.strip():
+
             try:
-                with st.spinner("Searching in Qdrant..."):
-                    query_vector = model.encode(query).tolist()
-                    results = search_qdrant(qdrant_client, "my_collection", query_vector)
+                query_vector = model.encode(prompt).tolist()
+                results = search_qdrant(qdrant_client, "my_collection", query_vector)
 
                 if results:
                     retrieved_context = " ".join([r.payload["text"] for r in results])
 
-                    with st.expander("View Retrieved Context"):
-                        for i, result in enumerate(results):
-                            st.markdown(f"** Chunk {i+1} (Score: {getattr(result, 'score', 'N/A')}):**")
-                            st.write(result.payload["text"])
-                            st.markdown("---")
-
                     ollama_payload = {
                         "model": "llama3",
-                        "prompt": f"{SYSTEM_PROMPT_QA}\n\nContext:\n{retrieved_context}\n\nQuestion:\n{query}\n\nAnswer:",
+                        "prompt": f"{SYSTEM_PROMPT_QA}\n\nContext:\n{retrieved_context}\n\nQuestion:\n{prompt}\n\nAnswer:",
                         "stream": False
                     }
 
-                    try:
-                        with st.spinner("Getting answer from Ollama..."):
-                            response = requests.post(
-                                "http://localhost:11434/api/generate",
-                                json=ollama_payload,
-                                timeout=300
-                            )
+                    response = requests.post("http://localhost:11434/api/generate", json=ollama_payload, timeout=300)
 
-                        if response.status_code == 200:
-                            answer = response.json()["response"].strip()
-                            st.subheader("Answer:")
-                            st.write(answer)
-                        else:
-                            st.error(f"Ollama API returned status code: {response.status_code}")
-
-                    except requests.exceptions.ConnectionError:
-                        st.error(" Could not connect to Ollama. Make sure it is running.")
-                    except Exception as e:
-                        st.error(f"Ollama error: {str(e)}")
+                    if response.status_code == 200:
+                        answer = response.json()["response"].strip()
+                        msg_placeholder.markdown(answer)
+                        st.session_state.messages.append({"role": "assistant", "content": answer})
+                    else:
+                        error_msg = f"Ollama API returned status code: {response.status_code}"
+                        msg_placeholder.markdown(error_msg)
+                        st.session_state.messages.append({"role": "assistant", "content": error_msg})
 
                 else:
-                    st.warning("No relevant results found in Qdrant.")
+                    no_result_msg = "No relevant results found in Qdrant."
+                    msg_placeholder.markdown(no_result_msg)
+                    st.session_state.messages.append({"role": "assistant", "content": no_result_msg})
 
             except Exception as e:
-                st.error(f"Search error: {str(e)}")
-        else:
-            st.warning("Please enter a question before clicking 'Ask'")
+                error_msg = f"Search error: {str(e)}"
+                msg_placeholder.markdown(error_msg)
+                st.session_state.messages.append({"role": "assistant", "content": error_msg})
