@@ -16,14 +16,12 @@ load_dotenv()
 def get_llama_parser():
     return LlamaParse(api_key=os.getenv("LLAMA_PARSE_API_KEY"))
 
-#Initialising Ollama model
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL")
 # Initialize Qdrant client
 client = QdrantClient(
     url=os.getenv("QDRANT_URL"),
     api_key=os.getenv("QDRANT_API_KEY"),
 )
-# === File Reader ===
+# --- File Reader ---
 def read_file(file_path):
     ext = os.path.splitext(file_path)[1].lower()
 
@@ -57,12 +55,12 @@ def read_file(file_path):
     else:
         raise ValueError(f"Unsupported file type: {ext}")
 
-# === Chunking ===
+# --- Chunking ---
 def chunk_text(text, max_tokens=100):
     words = text.split()
     return [" ".join(words[i:i + max_tokens]) for i in range(0, len(words), max_tokens)]
 
-# === Qdrant Collection Management ===
+# --- Qdrant Collection Management ---
 def create_qdrant_collection(client, collection_name, model, distance=Distance.COSINE):
     size=model.get_sentence_embedding_dimension()
 
@@ -79,7 +77,7 @@ def create_qdrant_collection(client, collection_name, model, distance=Distance.C
     except Exception as e:
         print(f"Error creating collection: {e}")
 
-# === Upload Embeddings ===
+# --- Upload Embeddings ---
 def upload_vectors_to_qdrant(client, collection_name, vectors, chunks):
     try:
         client.upsert(
@@ -97,7 +95,7 @@ def upload_vectors_to_qdrant(client, collection_name, vectors, chunks):
     except Exception as e:
         print(f"Error uploading vectors: {e}")
 
-# === Vector Search ===
+# --- Vector Search ---
 def search_qdrant(client, collection_name, query_vector, limit=3):
     try:
         results = client.search(
@@ -114,20 +112,3 @@ def search_qdrant(client, collection_name, query_vector, limit=3):
     except Exception as e:
         print(f"Error during search: {e}")
         return []
-
-# === Contextual Answering ===
-def get_answer_from_ollama(query: str, context: str,) -> str:
-    prompt = f"{SYSTEM_PROMPT_QA}\n\nContext: {context}\n\nQuestion: {query}\n\nAnswer:"
-    payload = {
-        "model": OLLAMA_MODEL,
-        "prompt": prompt,
-        "stream": False
-    }
-
-    try:
-        response = requests.post("http://localhost:11434/api/generate", json=payload)
-        response.raise_for_status()
-        return response.json()["response"].strip()
-    except Exception as e:
-        print(f"Error getting answer from Ollama: {e}")
-        return "Error: Could not get answer from Ollama."

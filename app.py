@@ -5,7 +5,7 @@ from sentence_transformers import SentenceTransformer
 from rag_utils import *
 from prompt import SYSTEM_PROMPT_QA
 
-# ----- PAGE CONFIG ---
+# ----- PAGE CONFIG -----
 st.set_page_config(page_title="RAG Implementation with Qdrant + Ollama", layout="wide")
 
 # ----- LOADING CSS -----
@@ -16,7 +16,7 @@ def load_css(file_path):
 load_css("style.css")
 
 # ----- TITLE -----
-st.title("RAG Implementation with ")
+st.title("RAG Implementation with Qdrant + Ollama")
 
 # ----- LOAD MODEL AND QDRANT CLIENT -----
 @st.cache_resource
@@ -30,17 +30,31 @@ def get_client():
 model = load_model()
 qdrant_client = get_client()
 
+
 # ----- SIDEBAR -----
 with st.sidebar:
     st.image("chatboticon.png", width=300)
+
+    #To select Llama model
+    selected_model = st.sidebar.selectbox('Choose a Llama model', ['Llama3.2-1B','Llama3.2-3B', 'Llama3'], key='selected_model')
+    if selected_model == 'Llama3.2-1B':
+        llama_model = 'llama3.2:1b'
+    elif selected_model == 'Llama3.2-3B':
+        llama_model = 'llama3.2:3b'
+    elif selected_model == 'Llama3':
+        llama_model = 'llama3'
+
+    #File uploader
     file = st.file_uploader("Drop your file here:", type=["txt", "pdf", "docx", "csv", "html"])
+
+    
 
     if file and not st.session_state.get('processed', False):
         save_folder = "uploads"
         os.makedirs(save_folder, exist_ok=True)
         save_path = os.path.join(save_folder, file.name)
         with open(save_path, "wb") as f:
-            f.write(file.getbuffer())
+            f.write(file.getbuffer()) #locally saved
 
         try:
             raw_text = read_file(save_path)
@@ -99,7 +113,7 @@ if prompt := st.chat_input("Ask me anything about your file..."):
                     retrieved_context = " ".join([r.payload["text"] for r in results])
 
                     ollama_payload = {
-                        "model": "llama3",
+                        "model": llama_model,
                         "prompt": f"{SYSTEM_PROMPT_QA}\n\nContext:\n{retrieved_context}\n\nQuestion:\n{prompt}\n\nAnswer:",
                         "stream": False
                     }
