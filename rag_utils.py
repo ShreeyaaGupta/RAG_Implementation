@@ -8,7 +8,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http.models import VectorParams, Distance
 from llama_parse import LlamaParse
 from prompt import SYSTEM_PROMPT_QA
-
+import numpy as np
 # Load API keys from .env file
 load_dotenv()
 
@@ -18,7 +18,7 @@ def get_llama_parser():
 
 # Initialize Qdrant client
 client = QdrantClient(
-    url=os.getenv("QDRANT_URL"),
+    url=os.getenv("QDRANT_ENDPOINT_URL"),
     api_key=os.getenv("QDRANT_API_KEY"),
 )
 # --- File Reader ---
