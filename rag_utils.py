@@ -6,30 +6,34 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import VectorParams, Distance
-from llama_parse import LlamaParse
 from prompt import SYSTEM_PROMPT_QA
 import numpy as np
+from pypdf import PdfReader  
+
 # Load API keys from .env file
 load_dotenv()
-
-# Initialize LlamaParse client
-def get_llama_parser():
-    return LlamaParse(api_key=os.getenv("LLAMA_PARSE_API_KEY"))
 
 # Initialize Qdrant client
 client = QdrantClient(
     url=os.getenv("QDRANT_ENDPOINT_URL"),
     api_key=os.getenv("QDRANT_API_KEY"),
 )
+
 # --- File Reader ---
 def read_file(file_path):
     ext = os.path.splitext(file_path)[1].lower()
 
     if ext == ".pdf":
-        print("Parsing PDF with LlamaParse...")
-        parser = get_llama_parser()
-        documents = parser.load_data(file_path)
-        return "\n".join([doc.text for doc in documents])
+        print("Parsing PDF with PyPDF...")
+        try:
+            reader = PdfReader(file_path)
+            text = ""
+            for page in reader.pages:
+                text += page.extract_text() + "\n"
+            return text.strip()
+        except Exception as e:
+            print(f"Failed to parse PDF: {e}")
+            return ""
 
     elif ext == ".txt":
         with open(file_path, "r", encoding="utf-8") as f:
@@ -62,7 +66,7 @@ def chunk_text(text, max_tokens=100):
 
 # --- Qdrant Collection Management ---
 def create_qdrant_collection(client, collection_name, model, distance=Distance.COSINE):
-    size=model.get_sentence_embedding_dimension()
+    size = model.get_sentence_embedding_dimension()
 
     try:
         existing = client.get_collections().collections

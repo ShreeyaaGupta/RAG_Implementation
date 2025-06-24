@@ -8,3 +8,4 @@ lxml
 llama-index[llamaparse]
 streamlit
 python-dotenv
+pypdf

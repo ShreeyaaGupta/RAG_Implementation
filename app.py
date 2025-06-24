@@ -1,18 +1,12 @@
 import streamlit as st
 import os
-import asyncio
-# import aiofiles
 import requests
 from sentence_transformers import SentenceTransformer
 from rag_utils import *
 from prompt import SYSTEM_PROMPT_QA
 
-from llama_parse import LlamaParse
-from dotenv import load_dotenv
-load_dotenv()
-
 # ----- CONFIG -----
-st.set_page_config(page_title="RAG with Qdrant + Ollama + LlamaParse", layout="wide")
+st.set_page_config(page_title="RAG with Qdrant + Ollama", layout="wide")
 
 # ----- LOAD MODEL AND QDRANT CLIENT -----
 @st.cache_resource
@@ -26,7 +20,6 @@ def get_client():
 model = load_model()
 qdrant_client = get_client()
 
-
 # ----- FILE HANDLING -----
 def process_with_qdrant(file_path: str):
     raw_text = read_file(file_path)
@@ -36,19 +29,6 @@ def process_with_qdrant(file_path: str):
     create_qdrant_collection(qdrant_client, "my_collection", model)
     upload_vectors_to_qdrant(qdrant_client, "my_collection", vectors, chunks)
     return True
-
-
-async def process_with_llamaparse(file_path: str) -> str:
-    llama_parser = LlamaParse(api_key=os.getenv("LLAMA_PARSE_API_KEY"))
-    job = llama_parser.parse(file_path=file_path)
-    print("------line36----------", job)
-    # Wait for the parsing to complete and fetch the result
-    result = job.pages[0]  # This blocks until parsing is complete
-    parsed_text = result.text  # Get the full parsed text
-
-    print("------line41----------", parsed_text)
-    return parsed_text
-
 
 # ----- SIDEBAR -----
 with st.sidebar:
@@ -61,7 +41,7 @@ with st.sidebar:
         'Llama3': 'llama3',
     }[selected_model]
 
-    file = st.file_uploader("Drop your file here:", type=["txt", "pdf", "docx", "csv", "html",], key='file_uploader')
+    file = st.file_uploader("Drop your file here:", type=["txt", "pdf", "docx", "csv", "html"], key='file_uploader')
 
     if file and not st.session_state.get('processed', False):
         save_path = os.path.join("uploads", file.name)
@@ -70,25 +50,25 @@ with st.sidebar:
             f.write(file.getbuffer())
 
         try:
-            with st.spinner("Processing with LlamaParse..."):
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
+            with st.spinner("Processing and uploading to Qdrant..."):
+                processed = process_with_qdrant(save_path)
 
-                # Start both but wait only for LlamaParse
-                llama_output = loop.run_until_complete(process_with_llamaparse(save_path))
-                print("------line79----------"  , llama_output)
-                print("-----80-----",process_with_qdrant(save_path) ) # Optional
-
-                if llama_output.strip():
+                if processed:
                     st.session_state.processed = True
-                    st.session_state.llama_parsed_text = llama_output
-                    st.success("File uploaded and processed successfully!")
-                else:
-                    st.error("LlamaParse returned empty content.")
+                    st.success("File uploaded and indexed in Qdrant successfully!")
 
+                else:
+                    st.error("Failed to process and upload the file.")
+
+            
         except Exception as e:
             st.error(f"Processing Error: {str(e)}")
-
+    st.markdown("""
+        <hr>
+        <div style="text-align: center; font-size: 12px; color: #666;">
+            © 2025, CloudKaptan Consultancy Services Private Limited. All rights reserved.
+        </div>
+        """, unsafe_allow_html=True)
 
 # ----- CHAT UI -----
 if "messages" not in st.session_state:
@@ -112,12 +92,16 @@ if prompt := st.chat_input("Ask me anything about your file..."):
             msg_placeholder.markdown("Thinking...")
 
             try:
-                retrieved_context = st.session_state.get("llama_parsed_text", "")
-
+                # Encode query and perform vector search
+                query_vector = model.encode([prompt])[0].tolist()
+                results = search_qdrant(qdrant_client, "my_collection", query_vector)
+                context_chunks = [r.payload["text"] for r in results]
+                retrieved_context = "\n\n".join(context_chunks)
 
                 if not retrieved_context:
-                    raise ValueError("LlamaParse content missing.")
+                    raise ValueError("No context retrieved from Qdrant.")
 
+                # Call Ollama for LLM completion
                 ollama_payload = {
                     "model": llama_model,
                     "prompt": f"{SYSTEM_PROMPT_QA}\n\nContext:\n{retrieved_context}\n\nQuestion:\n{prompt}\n\nAnswer:",
@@ -136,6 +120,6 @@ if prompt := st.chat_input("Ask me anything about your file..."):
                     st.session_state.messages.append({"role": "assistant", "content": error_msg})
 
             except Exception as e:
-                error_msg = f"Error during LlamaParse QA: {str(e)}"
+                error_msg = f"Error during Qdrant-based QA: {str(e)}"
                 msg_placeholder.markdown(error_msg)
                 st.session_state.messages.append({"role": "assistant", "content": error_msg})
